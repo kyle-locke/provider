@@ -1,0 +1,155 @@
+graph TD
+    %% --- Node Definitions (with styling) ---
+    classDef startend fill:#f9f,stroke:#333,stroke-width:2px,color:black;
+    classDef process fill:#e1f5fe,stroke:#0277bd,stroke-width:1px,color:black;
+    classDef decision fill:#fff9c4,stroke:#fbc02d,stroke-width:1px,color:black;
+    classDef screen fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,stroke-dasharray: 5 5,color:black;
+    classDef error fill:#ffcdd2,stroke:#c62828,stroke-width:1px,color:black;
+
+    Start((START: <br/>Super Admin Registration)):::startend
+    
+    %% --- Section 1: Super Admin Account Creation ---
+    subgraph Section_1 [1.0 SUPER ADMIN ACCOUNT CREATION]
+        RegistrationForm[UI: Lean Registration Form<br/>Name, Work Email, Company, Password]:::screen
+        ValidateForm{Valid<br/>Input?}:::decision
+        ShowError[UI: Inline Error<br/>Messaging]:::error
+        
+        CreateOrg[SYSTEM: Create Organization & Admin Record]:::process
+        SendVerify[SYSTEM: Send Verification Email]:::process
+        
+        VerifyEmailScreen[UI: 'Check Your Email' Page<br/>Resend Option]:::screen
+        EmailLink[USER: Clicks Verification Link]:::process
+        
+        AccountActive[SYSTEM: Activate Account]:::process
+        WelcomeDashboard[UI: Post-Activation Dashboard<br/>Prominent CTA: 'Invite Your Team']:::screen
+    end
+
+    %% --- Section 2: Adding and Inviting Delegates ---
+    subgraph Section_2 [2.0 DELEGATE ONBOARDING FLOW]
+        InviteCTA[USER: Clicks 'Invite Your Team' / 'Add Delegate']:::process
+        
+        InvitationUI[UI: Manage Users / Invite Modal<br/>Email Input, Role Selector, Custom Note]:::screen
+        
+        %% Choose Invitation Method
+        ChooseMethod{Input Method?}:::decision
+        
+        subgraph Individual_Invite [2.1 Individual Invite]
+            SingleInput[USER: Enters Single Email]:::process
+            SingleRole[USER: Selects Role<br/>Admin, Manager, Member]:::process
+        
+            CheckDomain{Email Domain<br/>Allowed?}:::decision
+            DomainError[UI: Domain Restriction Error]:::error
+            AddSingleToList[SYSTEM: Stage Delegate]:::process
+        end
+
+        subgraph Bulk_Invite [2.2 Bulk / CSV Invite]
+            CSVUpload[USER: Uploads CSV File]:::process
+            ParseCSV[SYSTEM: Parse and Validate CSV]:::process
+            
+            CSVSuccess{Parse<br/>Success?}:::decision
+            CSVErrorUI[UI: CSV Validation Error<br/>Highlight Invalid Rows]:::error
+            
+            ReviewCSV[UI: Review Staged Users & Roles]:::screen
+            ModifyStaged[USER: (Optional) Bulk Edit Roles]:::process
+            ConfirmCSV[USER: Confirms Staged List]:::process
+        end
+        
+        SendInvites[USER: Clicks 'Send Invitations']:::process
+    end
+
+    %% --- Section 3: Delegate Account Activation ---
+    subgraph Section_3 [3.0 DELEGATE ACTIVATION FLOW]
+        RecordInvite[SYSTEM: Create 'Pending' Delegate Records<br/>Audit Log Sent]:::process
+        SendDelegateEmails[SYSTEM: Send Unique Invitation Emails]:::process
+        
+        DelegateEmail[USER/DELEGATE: Receives Email]:::process
+        ClickInviteLink[USER/DELEGATE: Clicks 'Accept Invitation' Link]:::process
+        
+        InviteValid{Link<br/>Valid/Active?}:::decision
+        LinkExpired[UI: 'Invite Expired' Page<br/>CTA to Request New]:::error
+        
+        DelegateSignup[UI: Create Password / Complete Profile]:::screen
+        ActivateDelegate[SYSTEM: Activate Delegate Account]:::process
+        AuditAccept[SYSTEM: Audit Log: Invite Accepted]:::process
+        
+        DelegateDashboard[UI: Delegate Lands on Dashboard<br/>Limited by Role]:::screen
+    end
+
+    %% --- Section 4: Super Admin User Management (Pending State) ---
+    subgraph Section_4 [4.0 ADMIN MANAGEMENT OF PENDING USERS]
+        UserTable[UI: User Management Table<br/>Filter: 'Pending']:::screen
+        
+        PendingState{Pending<br/>User State?}:::decision
+        
+        ResendInvite[SYSTEM: Resend Invitation Email]:::process
+        AuditResend[SYSTEM: Audit Log: Resend Invite]:::process
+        
+        RevokeInvite[SYSTEM: Invalidate Invite Link]:::process
+        AuditRevoke[SYSTEM: Audit Log: Revoke Invite]:::process
+        
+        AdminDashboardUpdate[UI: Dashboard Updated]:::screen
+    end
+
+    %% --- Flow Connections ---
+    Start --> RegistrationForm
+    RegistrationForm --> ValidateForm
+    ValidateForm -- No --> ShowError
+    ShowError --> RegistrationForm
+    ValidateForm -- Yes --> CreateOrg
+    CreateOrg --> SendVerify
+    SendVerify --> VerifyEmailScreen
+    VerifyEmailScreen --> EmailLink
+    EmailLink --> AccountActive
+    AccountActive --> WelcomeDashboard
+    
+    %% Transition to Delegate Flow
+    WelcomeDashboard --> InviteCTA
+    InviteCTA --> InvitationUI
+    InvitationUI --> ChooseMethod
+    
+    %% Individual Branch
+    ChooseMethod -- Single/Manual --> SingleInput
+    SingleInput --> SingleRole
+    SingleRole --> CheckDomain
+    CheckDomain -- No --> DomainError
+    DomainError --> SingleInput
+    CheckDomain -- Yes --> AddSingleToList
+    AddSingleToList --> SendInvites
+    
+    %% Bulk Branch
+    ChooseMethod -- Bulk/CSV --> CSVUpload
+    CSVUpload --> ParseCSV
+    ParseCSV --> CSVSuccess
+    CSVSuccess -- No --> CSVErrorUI
+    CSVErrorUI --> CSVUpload
+    CSVSuccess -- Yes --> ReviewCSV
+    ReviewCSV --> ModifyStaged
+    ModifyStaged --> ConfirmCSV
+    ConfirmCSV --> SendInvites
+    
+    %% Invitation Send to Activation
+    SendInvites --> RecordInvite
+    RecordInvite --> SendDelegateEmails
+    SendDelegateEmails --> DelegateEmail
+    DelegateEmail --> ClickInviteLink
+    ClickInviteLink --> InviteValid
+    InviteValid -- No --> LinkExpired
+    InviteValid -- Yes --> DelegateSignup
+    DelegateSignup --> ActivateDelegate
+    ActivateDelegate --> AuditAccept
+    AuditAccept --> DelegateDashboard
+    
+    %% Admin Management Path (Alternative flow)
+    RecordInvite -.- UserTable
+    UserTable --> PendingState
+    PendingState -- Resend --> ResendInvite
+    ResendInvite --> AuditResend
+    AuditResend -.-> DelegateEmail
+    PendingState -- Revoke --> RevokeInvite
+    RevokeInvite --> AuditRevoke
+    AuditRevoke --> AdminDashboardUpdate
+
+    %% End Nodes
+    DelegateDashboard:::startend
+    LinkExpired:::startend
+    AdminDashboardUpdate:::startend
